@@ -1,0 +1,69 @@
+stages:    #Each stage is a separate job that the runner will execute.
+  - testing # Running tests
+  - history_copy # Copy test results from previous runs tests
+  - reports # Report generation
+  - deploy # Publish the report to gitlab pages
+
+
+chrome_job:    # Job name
+  stage: testing    # The first stage to run
+  services:
+    - selenium/standalone-chrome
+  image: python:3.10    # You need to specify the image that will be used to run the tests.
+  tags:
+    - docker    # With this tag, gitlab will figure out which runner to run. It will launch the docker container from the image that we specified in step 6 of registering the runner.
+  before_script:
+    - pip install -r requirements.txt    # Install packages in a raised container before running the tests themselves
+  script:
+    - pytest --alluredir=./allure-results tests/    # Run tests  specifying the folder with test results via --alluredir =
+  allow_failure: true    # This will allow us to continue executing the pipeline in case the tests fail.
+  artifacts:    # The entity with which we will save the test result.
+    when: always    #Save always
+    paths:
+      - ./allure-results    # The report will be saved here
+    expire_in: 1 day    # Report retention period
+
+history_job:    # Job name
+  stage: history_copy    # The second stage to run
+  tags:
+    - docker    # With this tag, gitlab will figure out which runner to run.
+  image: storytel/alpine-bash-curl    # The runner will use a different image to download the test results from the previous pipeline.
+  script:
+    - 'curl --location --output artifacts.zip "https://gitlab.com/api/v4/projects/24360792/jobs/artifacts/master/download?job=pages&job_token=$CI_JOB_TOKEN"'    # Using the gitlab api, download files from the job, which will be listed below. Please note: 24360792 is your repository number
+    - apk add unzip    # The image used in this step does not have the unzip utility by default, for this reason we add it to the container
+    - unzip artifacts.zip    # Unpack the files
+    - chmod -R 777 public    # We give the rights to any manipulations with the content
+    - cp -r ./public/history ./allure-results    # Copy history to the folder with test results
+  allow_failure: true    # Since there is no history at the first start of the pipeline, this will allow us to avoid the fall of the pipeline. In the future, this line can be safely deleted.
+  artifacts:
+    paths:
+      - ./allure-results    # Save data
+    expire_in: 1 day    # Report retention period
+  rules:
+    - when: always    #Save always
+
+allure_job:    # Job name
+  stage: reports    # The third stage to run
+  tags:
+    - docker    # Using the same runner
+  image: frankescobar/allure-docker-service    # Tell the runner to use the allure image. In it we will generate a report.
+  script:
+     - allure generate -c ./allure-results -o ./allure-report    # Generate a report from ./allure-results inside the folder ./allure-report
+  artifacts:
+    paths:
+      - ./allure-results    # Let's mount these two directories to get test results and generate reports, respectively
+      - ./allure-report    # Let's mount these two directories to get test results and generate reports, respectively
+    expire_in: 1 day    # Report retention period
+  rules:
+    - when: always    #Save always
+
+pages:    # By the name of this job we tell gitlab to host the result in our pages
+  stage: deploy    # The fourth stage to run
+  script:
+    - mkdir public    # Create a public folder. By default, gitlab hosts in gitlab pages only from the public folder
+    - mv ./allure-report/* public    # Move the generated report to the public folder.
+  artifacts:
+    paths:
+      - public
+  rules:
+    - when: always

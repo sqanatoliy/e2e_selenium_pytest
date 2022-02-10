@@ -2,8 +2,10 @@ import allure
 import pytest
 from selenium import webdriver
 from selenium.webdriver import ChromeOptions
-from selenium.webdriver import FirefoxOptions
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver import FirefoxOptions
+from selenium.webdriver.firefox.service import Service
 from webdriver_manager.firefox import GeckoDriverManager
 
 
@@ -57,26 +59,26 @@ def get_firefox_options(config):
 def create_remote_driver(config):
     if config["browser"] == "chrome":
         options = get_chrome_options(config)
+        options.browser_version = config["version"]
+        options.accept_insecure_certs = True
+        options.screenResolution = "1920x1080x24"
     else:
         options = get_firefox_options(config)
-    capabilities = {"version": config["version"],
-                    "acceptInsecureCerts": True,
-                    "screenResolution": "1280x1024x24"}
+        options.browser_version = config["version"]
+        options.accept_insecure_certs = True
+        options.screenResolution = "1920x1080x24"
     return webdriver.Remote(command_executor="http://{}:4444/wd/hub".format(config["hub"]),
-                            options=options,
-                            desired_capabilities=capabilities)
+                            options=options)
 
 
 def create_local_driver(config):
     driver = None
     if config["browser"] == "chrome":
-        driver_manager = ChromeDriverManager()
         options = get_chrome_options(config)
-        driver = webdriver.Chrome(executable_path=driver_manager.install(), options=options)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     elif config["browser"] == "firefox":
-        driver_manager = GeckoDriverManager()
         options = get_firefox_options(config)
-        driver = webdriver.Firefox(executable_path=driver_manager.install(), options=options)
+        driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options)
     return driver
 
 
