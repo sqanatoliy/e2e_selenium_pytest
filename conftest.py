@@ -1,10 +1,10 @@
 import allure
 import pytest
 from selenium import webdriver
-from selenium.webdriver import ChromeOptions
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver import FirefoxOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.firefox.service import Service
 from webdriver_manager.firefox import GeckoDriverManager
 
@@ -14,7 +14,7 @@ def pytest_addoption(parser):
     parser.addoption("--browser_ver", action="store", default="")
     parser.addoption("--headless", action="store", default=False)
     parser.addoption("--remote", action="store", default=False)
-    parser.addoption("--hub", action="store", default="localhost")
+    parser.addoption("--hub", action="store", default="https://prom.ua/ua/")
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
@@ -75,15 +75,22 @@ def create_local_driver(config):
     driver = None
     if config["browser"] == "chrome":
         options = get_chrome_options(config)
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        # service = Service(executable_path='C:\\chromedriver\\chromedriver.exe')
+        driver = webdriver.Chrome(options=options)
     elif config["browser"] == "firefox":
         options = get_firefox_options(config)
-        driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options)
+        service = Service(executable_path=GeckoDriverManager().install())
+        driver = webdriver.Firefox(service=service, options=options)
     return driver
 
 
 @pytest.fixture()
-def driver(request, config):
+def url(request):
+    return request.config.getoption("--hub")
+
+
+@pytest.fixture()
+def driver(request, config, url):
     driver = None
     if config["remote"]:
         driver = create_remote_driver(config)
@@ -97,4 +104,11 @@ def driver(request, config):
         driver.quit()
 
     request.addfinalizer(tear_down)
+
+    def open(path=""):
+        return driver.get(url + path)
+
+    driver.open = open
+    driver.open()
+
     yield driver
